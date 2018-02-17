@@ -5,6 +5,8 @@ import scipy as scp
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.linalg import norm
+import pickle as pkl
+import pandas as pd
 
 class LassoRegression():
 
@@ -50,7 +52,7 @@ class LassoRegression():
                 res = res + (old_w[k] - self.weights[k])*X[k,:]
             
             loss, old_loss =  np.sum(res**2) + Lambda*(norm(self.weights,1)), loss
-            print old_loss, loss
+            # print old_loss, loss
         if old_loss < loss:
             self.weights = old_w
 
@@ -94,7 +96,7 @@ class LassoRegression():
                 res = res + (old_w[k] - weights[k])*X[k].T
             
             loss, old_loss =  (res.dot(res.T) + Lambda*(norm(weights,1)))[0,0], loss
-            print count
+            # print count
         
         if old_loss < loss:
             self.weights = old_w
@@ -109,18 +111,56 @@ class LassoRegression():
 
         return rmse**0.5
 
+    def final_train(self,X,Y):
+        Lambda = 2* norm( X*(Y - np.mean(Y) ),np.inf )
+        old_val_rmse = float('inf')
+        plot_data = {'lambda':[],'train_rmse':[],'val_rmse':[],'non_zeros':[]}
+        rmse_val = float('inf')
+        while rmse_train <= old_train_rmse:
+            # print rmse_val,old_val_rmse
+            old_train_rmse = rmse_train 
+            self.efficient_Lasso(X,Y,Lambda,1e-2)
+            rmse_train = self.get_rmse(Y, self.predict(X))
+            print "###############################\nEnd of Iteration"
+            
+            if rmse_train < min_rmse:
+                best_config = (Lambda,self.weights,self.bias)
+                with open(str(rmse_val)+'.pkl','wb') as f:
+                    pkl.dump(best_config,f)
+                min_rmse = rmse_val
+            
+            Lambda/=2
+        self.plot_kaggle_stats(plot_data)
+        return best_config
+    
     def kaggle_regularization_path(self,x_train,y_train,x_val,y_val,steps=10):
         Lambda = 2* norm( x_train*(y_train - np.mean(y_train) ),np.inf )
         old_val_rmse = float('inf')
-        while rmse <= old_val_rmse:
+        min_rmse = float('inf')
+        plot_data = {'lambda':[],'train_rmse':[],'val_rmse':[],'non_zeros':[]}
+        rmse_val = float('inf')
+        while rmse_val <= old_val_rmse:
+            # print rmse_val,old_val_rmse
             old_val_rmse = rmse_val 
-            self.efficient_Lasso(x_train,y_train,Lambda,1e-4)
+            self.efficient_Lasso(x_train,y_train,Lambda,1e-2)
             rmse_train = self.get_rmse(y_train, self.predict(x_train) )
             rmse_val = self.get_rmse(y_val, self.predict(x_val) )
             print "###############################\nEnd of Iteration"
-            print Lambda, rmse_train,rmse_val, np.count_nonzero(self.weights)
+            plot_data['lambda'].append(Lambda)
+            plot_data['train_rmse'].append(rmse_train)
+            plot_data['val_rmse'].append(rmse_val)
+            plot_data['non_zeros'].append(np.count_nonzero(self.weights))
+            print Lambda,rmse_train,rmse_val, np.count_nonzero(self.weights)
+            if rmse_val < min_rmse:
+                best_config = (Lambda,self.weights,self.bias)
+                with open(str(rmse_val)+'.pkl','wb') as f:
+                    pkl.dump(best_config,f)
+                min_rmse = rmse_val
+            
             Lambda/=2
- 
+        self.plot_kaggle_stats(plot_data)
+        return best_config
+
 
 
     def lambda_regularization_path(self,X,Y,real_weigh,steps=10):
@@ -133,7 +173,7 @@ class LassoRegression():
             plot_data['prec'].append(self.precision(real_weigh,self.weights))
             plot_data['recall'].append(self.recall(real_weigh,self.weights))
             Lambda/=2
-        self.plot_stats(plot_data)            
+        self.plot_synthetic_stats(plot_data)            
 
     def precision(self,true,pred):
         TP = 0
@@ -158,12 +198,47 @@ class LassoRegression():
     def predict(self,X):
         return X.T*self.weights + self.bias
 
-    def plot_stats(self,plot_data):
+    def plot_synthetic_stats(self,plot_data):
         plt.figure(figsize=(10,7))
         plt.plot(plot_data['lambda'],plot_data['prec'],'r')
         plt.plot(plot_data['lambda'],plot_data['recall'],'b')
         plt.xlabel('Lambda regularization path')
+        plt.ylabel('Precision/Recall')
         plt.legend(['Precision','Recall'],loc='best')
         plt.xticks([i for i in xrange(0,int(max(plot_data['lambda'])),800)])
+        plt.title('Precision/Recall vs. Lambda')
         plt.show()    
+
+    def plot_kaggle_stats(self,plot_data):
+        plt.figure(figsize=(10,7))
+        plt.plot(plot_data['lambda'],plot_data['train_rmse'],'r')
+        plt.plot(plot_data['lambda'],plot_data['val_rmse'],'b')
+        plt.xlabel('Lambda: Regularization parameter')
+        plt.legend(['Train RMSE','Val RMSE'],loc='best')
+        plt.title("RMSEs vs. Lambda")
+        # plt.xticks([i for i in xrange(0,int(max(plot_data['lambda'])),800)])
+        plt.show()
+
+        plt.plot(plot_data['lambda'],plot_data['non_zeros'])
+        plt.xlabel('Lambda: Regularization parameter')
+        plt.ylabel("Number of non zero elements in Weight vector")
+        plt.title("Non zero elements in weight vs. Lambda")
+        plt.show()
+
+
+    def get_important_features(self,filename= '2.04828842447.pkl'):
+        with open(filename) as f:
+            data = pkl.load(f)
+
+        weights = pd.DataFrame(data[1])
+
+        with open('featureTypes.txt') as f:
+            feats = pd.read_csv(f,header=None)
+
+        feats['w'] = weights[0]
+
+        feats.sort_values(by='w',inplace=True)
+        print feats.head(10)
+        print feats.tail(10)
+        
 
