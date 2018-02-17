@@ -3,7 +3,7 @@ import pandas as pd
 from scipy.sparse import csc_matrix
 import numpy as np
 
-# import pdb; pdb.set_trace()
+import pdb; pdb.set_trace()
 class Kaggle():
 
     def __init__(self,classifier):
@@ -44,7 +44,7 @@ def main():
     kaggle.clf.bias = 0
     kaggle.clf.weights = np.random.normal(0,1,kaggle.x_train.shape[0])
     kaggle.clf.kaggle_regularization_path(kaggle.x_train,kaggle.y_train,kaggle.x_val,kaggle.y_val)
-    print "yo"
+    
     
 
 if __name__ == '__main__':
